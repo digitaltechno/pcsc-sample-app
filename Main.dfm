@@ -235,7 +235,7 @@ object MainForm: TMainForm
         Width = 97
         Height = 21
         TabOrder = 7
-        Text = '1'
+        Text = '5'
       end
       object btnUID: TButton
         Left = 255

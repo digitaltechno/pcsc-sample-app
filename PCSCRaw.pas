@@ -460,15 +460,13 @@ end;
 
 function TPCSCRaw.Initialize: DWord;
 var
-  tmpDLLH,tmpDLL: THandle;
+  tmpDLLH: THandle;
   tmpValid: boolean;
 begin
 
-  tmpDLL:=LoadLibrary('scardsyn.dll');
-
   // Try to load the DLLs
   tmpDLLH:=LoadLibrary('WINSCARD.DLL');
-  if (tmpDLLH=0) or (tmpDLL=0) then begin
+  if (tmpDLLH=0) then begin
     result:=TPCSC_INIT_DLL_NOT_FOUND;
     exit;
   end;
@@ -500,12 +498,6 @@ begin
   _SCardSetAttrib:=nil;
   _SCardStatusA:=nil;
 
-  //scardsync start
-  @_SCardCLGetUID:=GetProcAddress(tmpDLL,'SCardCLGetUID');
-  @_SCardAuth:=GetProcAddress(tmpDLL,'SCardCLMifareStdAuthent');
-  @_SCardRead:=GetProcAddress(tmpDLL,'SCardCLMifareStdRead');
-  @_SCardWrite:=GetProcAddress(tmpDLL,'SCardCLMifareStdWrite');
-  //scardsync OFF
 
   @_SCardBeginTransaction:=GetProcAddress(tmpDLLH,  'SCardBeginTransaction');
   @_SCardCancel:=GetProcAddress(tmpDLLH, 'SCardCancel');
@@ -557,7 +549,6 @@ begin
      FValid:=True;
      Result:=TPCSC_INIT_OK;
      FhWinSCard:=tmpDLLH;
-     FhScardSync:=tmpDLL;
   end
   else Result:=TPCSC_INIT_SUPPORT_INCOMPLETE;
 end;

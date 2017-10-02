@@ -124,7 +124,10 @@ type
     function SCWrite(ulMifareBlockNr:DWORD;out pucMifareDataWrite:PUCHAR;ulMifareDataWriteBufLen:DWORD):DWORD;
     function SCGetUID(out pucUID: UCHAR;ulUIDBufLen: DWORD; out pulnByteUID: DWORD): DWORD;
     function SCDisconnect:DWORD;
-
+    function SCardLoadKey(Key:string;ReaderType:Byte):string;
+    function SCardAuth(blockNr,authMode:byte):string;
+    function SCardWrite(blockNr:Byte;Data:string):string;
+    function SCardRead(blockNr:Byte):string;
     //card front-end pdu transmit communication
     function ConnectCard:Boolean;
     function IsCardConnected:Boolean;
@@ -626,6 +629,108 @@ begin
     except
       Terminate;
     end;
+end;
+
+function TReaderObject.SCardAuth(blockNr,authMode:byte): string;
+var
+    I,N:DWord;
+    InBuf : array of Byte;
+    OutBuf: array[0..255] of Byte;
+    InHex,Response:string;
+begin
+    Result:='';
+    if not IsCardConnected then Exit;
+    case authMode of
+    0: InHex:='FF860000050100'+IntToHex(blockNr,2)+'6000';
+    1: InHex:='FF860000050100'+IntToHex(blockNr,2)+'6100';
+    end;
+    N:=Length(InHex) div 2;
+    SetLength(InBuf,N);
+    for I:=0 to N-1 do
+        InBuf[I]:=StrToInt('$'+Copy(InHex,I*2+1,2));
+    I:=SizeOf(OutBuf);
+    if SCARD_S_SUCCESS=SCTransmit(@InBuf[0], @OutBuf[0], N, I) then
+    begin
+        for i:=0 to I-1 do Response:=Response+IntToHex(OutBuf[i],2);
+        Result:=Response;
+    end;
+end;
+
+function TReaderObject.SCardLoadKey(Key: string; ReaderType: Byte): string;
+var
+    I,N:DWord;
+    InBuf : array of Byte;
+    OutBuf: array[0..255] of Byte;
+    InHex,Response:string;
+begin
+    Result:='';
+    if (not IsCardConnected) and (Length(Key)<>12)  then Exit;
+
+    case readertype of
+    0: InHex:='FF82200006'+Key; //omnikey
+    1: InHex:='FF82000006'+Key; //acs
+    end;
+    N:=Length(InHex) div 2;
+    SetLength(InBuf,N);
+    for I:=0 to N-1 do
+        InBuf[I]:=StrToInt('$'+Copy(InHex,I*2+1,2));
+    I:=SizeOf(OutBuf);
+    if SCARD_S_SUCCESS=SCTransmit(@InBuf[0], @OutBuf[0], N, I) then
+    begin
+        for i:=0 to I-1 do Response:=Response+IntToHex(OutBuf[i],2);
+        Result:=Response;
+    end;
+end;
+
+function TReaderObject.SCardWrite(blockNr:Byte; Data:string): string;
+var
+    I,N:DWord;
+    InBuf : array of Byte;
+    OutBuf: array[0..255] of Byte;
+    InHex,Response:string;
+begin
+    Result:='';
+    if (not IsCardConnected) or (Data='')  then Exit;
+
+    for i:=0 to 15 do
+    begin
+     if i<Length(Data) then InHex:=InHex+inttohex(ord(data[i+1]),2) else
+          InHex:=InHex+inttohex(ord(chr(0)),2);
+    end;
+    InHex:='FFD600'+IntToHex(blockNr,2)+'10'+InHex;
+    N:=Length(InHex) div 2;
+    SetLength(InBuf,N);
+    for I:=0 to N-1 do
+        InBuf[I]:=StrToInt('$'+Copy(InHex,I*2+1,2));
+    I:=SizeOf(OutBuf);
+    if SCARD_S_SUCCESS=SCTransmit(@InBuf[0], @OutBuf[0], N, I) then
+    begin
+        for i:=0 to I-1 do Response:=Response+IntToHex(OutBuf[i],2);
+        Result:=Response;
+    end;
+end;
+
+function TReaderObject.SCardRead(blockNr: Byte): string;
+var
+    I,N:DWord;
+    InBuf : array of Byte;
+    OutBuf: array[0..255] of Byte;
+    InHex,Response:string;
+begin
+    Result:='';
+    if (not IsCardConnected)  then Exit;
+    InHex:='FFB000'+IntToHex(blockNr,2)+'10';
+    N:=Length(InHex) div 2;
+    SetLength(InBuf,N);
+    for I:=0 to N-1 do
+        InBuf[I]:=StrToInt('$'+Copy(InHex,I*2+1,2));
+    I:=SizeOf(OutBuf);
+    if SCARD_S_SUCCESS=SCTransmit(@InBuf[0], @OutBuf[0], N, I) then
+    begin
+       for i:=0 to I-1 do Response:=Response+IntToHex(OutBuf[i],2);
+       Result:=Response;
+    end;
+
 end;
 
 end.

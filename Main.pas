@@ -96,6 +96,7 @@ type
     procedure Button3Click(Sender: TObject);
   private
     ReaderType:integer;
+    ReaderObject:TReaderObject;
     FPCSCRaw:TPCSCRaw;
     FPCSCDeviceContext:DWORD;
     FReaderListThread:TReaderListThread;
@@ -113,10 +114,7 @@ type
     procedure LogInBuffer(Buffer:PByteArray;BufferSize:DWORD);
     function LogOutBuffer(Buffer:PByteArray;BufferSize:DWORD):String;
     function StringToBuffer(Command:string;Buffer:PByteArray):DWORD;
-    function loadKEY(key:string):Boolean;
-    function sc_Auth(blockNr,authMode:Integer;key:string):Boolean;
-    function SC_Write(blockNr:integer;data:string):Boolean;
-    function SC_Read(blockNr:integer):String;
+
 
   public
   end;
@@ -670,72 +668,51 @@ end;  }
 
 procedure TMainForm.btnReadClick(Sender: TObject);
 var
-  PCSCResult:DWORD;
-  ReaderObject:TReaderObject;
-  pucData:PUCHAR;
   i:integer;
-  rec,str:WideString;
+  rec,str,s:WideString;
 
-  pulMifareNumOfDataRead:DWORD;
 begin
- SC_Read(StrToInt(auth_block.Text));
- {ReaderObject:=TReaderObject(ReaderListBox.Items.Objects[ReaderListBox.ItemIndex]);
- PCSCResult:=ReaderObject.SCRead(StrToInt(auth_block.text),pucdata,16,pulMifareNumOfDataRead);
-    if PCSCResult=SCARD_S_SUCCESS then
-    begin
-                rec:='';
-                str:='';
-                for i:=0 to 15 do begin
-                  //Rec := Rec +chr(ord(pucData[i]));
-                  Rec := Rec +IntToHex(ord(pucData[i]),2);
-                  str := str +pucData[i];
-                end;
-          AddLog('SCardRead succeeded. ',clGreen,false,true);
-          AddLog('Data Hex: '+rec,clBlue,true,true);
-          AddLog('Data ASCII: '+str,clBlue,true,true);
+   ReaderObject:=TReaderObject(ReaderListBox.Items.Objects[ReaderListBox.ItemIndex]);
+   s:=ReaderObject.SCardRead(StrToInt(auth_block.Text));
+   if s<>'' then
+   begin
+        i:=length(s);
+        if (i>4) then
+        begin
+           for i:=0 to 15 do
+           begin
+               str:=str+chr(StrToInt('$'+Copy(s,I*2+1,2)));
+               rec:=rec+Copy(s,I*2+1,2);
+               //Result:=IntToHex(OutBuf[I-2],2)+Result;
+           end;
+           AddLog('SCardRead succeeded Hex: '+rec,clGreen,True,true);
+           AddLog('SCardRead succeeded: '+str,clGreen,True,true);
+        end else AddLog('SCardRead Failed : '+s,clRed,true,true);
 
-    end else
-    begin
-      AddLog('Failed : '+IntToStr(PCSCResult),clRed,true,true);
-    end;
-    }
+   end;
 end;
 
 procedure TMainForm.btnAuthClick(Sender: TObject);
 var
-     PCSCResult:DWORD;
-     ReaderObject:TReaderObject;
-     pKey: array[0..5] of Byte;
-     i:integer;
-     iKey:Int64;
-     strKey:string;
+  s:string;
 begin
-  sc_Auth(StrToInt(auth_block.text),RadioGroup1.ItemIndex,auth_key.Text);
-  { strKey:=auth_key.Text;
-     for i:=low(pkey) to high(pkey) do
-     begin
-         pkey[i]:=strToInt('$'+Copy(strKey,(i*2)+1,2));
-     end;
-    if ReaderListBox.ItemIndex<0 then exit;
-    ReaderObject:=TReaderObject(ReaderListBox.Items.Objects[ReaderListBox.ItemIndex]);
-
-    PCSCResult:=ReaderObject.SCAuth(
-    StrToInt(auth_block.Text),
-    RadioGroup1.Tag, //auth mode 96=Mode A, 97=Mode B
-    0, //AccessOption = 0 ' use 6 bytes key instead of key nr
-    0, //mifareKeyNr
-    pKey[0],
-    6);
-
-
-    if PCSCResult=SCARD_S_SUCCESS then
-    begin
-          btnRead.Enabled:=true;
-          AddLog('SCardAuth succeeded.',clGreen,true,true);
-    end
-    else begin
-      AddLog('Failed : '+IntToStr(PCSCResult),clRed,false,true);
-    end;  }
+   ReaderObject:=TReaderObject(ReaderListBox.Items.Objects[ReaderListBox.ItemIndex]);
+   s:=ReaderObject.SCardLoadKey(auth_key.Text,ReaderType);
+   if s='9000' then
+   begin
+      AddLog('Load Key succeeded: '+auth_key.Text,clGreen,true,true);
+      s:=ReaderObject.SCardAuth(StrToInt(auth_block.text),RadioGroup1.ItemIndex);
+      if s='9000' then
+      begin
+        AddLog('SC Auth succeeded: '+s,clGreen,true,true);
+      end else
+      begin
+        AddLog(Format('SC Auth failed with error code %s ',[s]),clRed,true,true);
+      end;  
+   end else
+   begin
+     AddLog(Format('Load Key failed with error code %s ',[s]),clRed,true,true);
+   end;
 end;
 
 procedure TMainForm.btnUIDClick(Sender: TObject);
@@ -774,33 +751,25 @@ procedure TMainForm.btnWriteClick(Sender: TObject);
 var
   PCSCResult:DWORD;
   ReaderObject:TReaderObject;
-  tmpStr : string;
+  tmpStr,s : string;
   indx : integer;
   dataBuffer:array of byte;
   i,dataLen:integer;
   pucData:PUCHAR;
   sData:string;
 begin
-  sData:=edWrite.Text;
-  SC_Write(StrToInt(auth_block.Text),sData);
-  {dataLen:=Length(sData);
-  for i:=0 to 15 do
-  begin
-    if i<dataLen then pucData[i]:=sdata[i+1] else
-     pucData[i]:=chr(0);
-  end;
 
- ReaderObject:=TReaderObject(ReaderListBox.Items.Objects[ReaderListBox.ItemIndex]);
- PCSCResult:=ReaderObject.SCWrite(StrToInt(auth_block.Text),pucdata,16);
-    if PCSCResult=SCARD_S_SUCCESS then
-    begin
-          AddLog('SCardCLWrite succeeded. ',clGreen,false,true);
+   sData:=edWrite.Text;
+   ReaderObject:=TReaderObject(ReaderListBox.Items.Objects[ReaderListBox.ItemIndex]);
+   s:=ReaderObject.SCardWrite(StrToInt(auth_block.Text),sData);
+   if s='9000' then
+   begin
+     AddLog('SC Write succeeded: '+sData,clRed,True,true);
+   end else
+   begin
+     AddLog(Format('SC Write failed with error code %s ',[s]),clRed,True,true);
+   end;
 
-    end else
-    begin
-      AddLog('Failed : '+IntToStr(PCSCResult),clRed,false,true);
-    end;
-              }
 end;
 
 procedure TMainForm.Button2Click(Sender: TObject);
@@ -981,181 +950,6 @@ begin
     end;
 end;
 
-
-
-function TMainForm.loadKEY(key: string): Boolean;
-var
-  InSize:DWORD;
-  OutSize:DWORD;
-  PCSCResult:DWORD;
-  ReaderObject:TReaderObject;
-  InBuffer:array[0..260] of byte;
-  OutBuffer:array[0..260] of byte;
-  apducommand,s:string;
-  i:integer;
-begin
-    if Length(trim(key))<12 then
-    begin
-          MessageDlg('Key Length must be 12 Char',mtError,[mbOK],0);
-          auth_key.SetFocus;
-    end;
-
-    case readertype of
-    0: apducommand:='FF 82 20 00 06 '+key; //omnikey
-    1: apducommand:='FF 82 00 00 06 '+key; //acs
-    end;
-    try
-    ReaderObject:=TReaderObject(ReaderListBox.Items.Objects[ReaderListBox.ItemIndex]);
-    InSize:=StringToBuffer(apducommand,@InBuffer[0]);
-    LogInBuffer(@InBuffer[0],InSize);
-    OutSize:=sizeof(OutBuffer);
-    PCSCResult:=ReaderObject.SCTransmit(@InBuffer[0],@OutBuffer[0],InSize,OutSize);
-    if PCSCResult=SCARD_S_SUCCESS then
-    begin
-      AddLog('Load Key succeeded.',clGreen,true,true);
-      Result:=LogOutBuffer(@OutBuffer[0],OutSize)='9000';
-    end else
-    begin
-      AddLog(Format('Load Key failed with error code %s ',[IntToHex(PCSCResult,8)]),clRed,false,true);
-      AddLog('('+FPCSCRaw.ScErrToSymbol(PCSCResult)+').',clBlack,true,false);
-    end;
-  finally
-
-  end;
-
-end;
-
-function TMainForm.sc_Auth(blockNr, authMode: Integer;
-  key: string): Boolean;
-var
-  InSize:DWORD;
-  OutSize:DWORD;
-  PCSCResult:DWORD;
-  ReaderObject:TReaderObject;
-  InBuffer:array[0..260] of byte;
-  OutBuffer:array[0..260] of byte;
-  apducommand,s,strKey:string;
-
-  i:integer;
-begin
-    loadKEY(key);
-    case RadioGroup1.ItemIndex of
-    0: apducommand:='FF 86 00 00 05 01 00 '+IntToHex(blockNr,2)+' 60 00 ';
-    1: apducommand:='FF 86 00 00 05 01 00 '+IntToHex(blockNr,2)+' 61 00 ';
-    end;
-     try
-         ReaderObject:=TReaderObject(ReaderListBox.Items.Objects[ReaderListBox.ItemIndex]);
-         InSize:=StringToBuffer(apducommand,@InBuffer[0]);
-         LogInBuffer(@InBuffer[0],InSize);
-         OutSize:=sizeof(OutBuffer);
-         PCSCResult:=ReaderObject.SCTransmit(@InBuffer[0],@OutBuffer[0],InSize,OutSize);
-         if PCSCResult=SCARD_S_SUCCESS then
-         begin
-           AddLog('SC Auth succeeded.',clGreen,true,true);
-           Result:=LogOutBuffer(@OutBuffer[0],OutSize)='9000';
-         end else
-         begin
-           AddLog(Format('SC Auth failed with error code %s ',[IntToHex(PCSCResult,8)]),clRed,false,true);
-           AddLog('('+FPCSCRaw.ScErrToSymbol(PCSCResult)+').',clBlack,true,false);
-         end;
-     finally
-
-     end;
-
-end;
-
-function TMainForm.SC_Write(blockNr: integer; data: string): Boolean;
-var
-  InSize:DWORD;
-  OutSize:DWORD;
-  PCSCResult:DWORD;
-  ReaderObject:TReaderObject;
-  InBuffer:array[0..260] of byte;
-  OutBuffer:array[0..260] of byte;
-  apducommand,s:string;
-  i:integer;
-  sData:string;
-begin
-   for i:=0 to 15 do
-   begin
-     if i<Length(Data) then sData:=sData+inttohex(ord(data[i+1]),2) else
-          sData:=sData+inttohex(ord(chr(0)),2);
-   end;
-   apducommand:='FFD600'+IntToHex(blockNr,2)+'10'+sData;
-     try
-         ReaderObject:=TReaderObject(ReaderListBox.Items.Objects[ReaderListBox.ItemIndex]);
-         InSize:=StringToBuffer(apducommand,@InBuffer[0]);
-         LogInBuffer(@InBuffer[0],InSize);
-         OutSize:=sizeof(OutBuffer);
-         PCSCResult:=ReaderObject.SCTransmit(@InBuffer[0],@OutBuffer[0],InSize,OutSize);
-         if PCSCResult=SCARD_S_SUCCESS then
-         begin
-           AddLog('SC Write succeeded: ',clGreen,false,true);
-           AddLog(apducommand,clRed,true,true);
-           Result:=LogOutBuffer(@OutBuffer[0],OutSize)='9000';
-         end else
-         begin
-           AddLog(Format('SC Write failed with error code %s ',[IntToHex(PCSCResult ,8)]),clRed,false,true);
-           AddLog('('+FPCSCRaw.ScErrToSymbol(PCSCResult)+').',clBlack,true,false);
-         end;
-     finally
-
-     end;
-
-end;
-
-function TMainForm.SC_Read(blockNr: integer): String;
-var
-  InSize:DWORD;
-  OutSize:DWORD;
-  PCSCResult:DWORD;
-  ReaderObject:TReaderObject;
-  InBuffer:array[0..260] of byte;
-  OutBuffer:array[0..260] of byte;
-  apducommand,s:string;
-  i:integer;
-  sData,Rec:string;
-  Buffer:PByteArray;
-  SW12,BufferSize:DWORD;
-begin
-   apducommand:='FFB000'+IntToHex(blockNr,2)+'10';
-     try
-         ReaderObject:=TReaderObject(ReaderListBox.Items.Objects[ReaderListBox.ItemIndex]);
-         InSize:=StringToBuffer(apducommand,@InBuffer[0]);
-         LogInBuffer(@InBuffer[0],InSize);
-         OutSize:=sizeof(OutBuffer);
-         PCSCResult:=ReaderObject.SCTransmit(@InBuffer[0],@OutBuffer[0],InSize,OutSize);
-         if PCSCResult=SCARD_S_SUCCESS then
-         begin
-           BufferSize:=OutSize;
-           Buffer:=@OutBuffer;
-           if BufferSize<2 then exit;
-           SW12:=(Buffer[BufferSize-2]shl 8) or Buffer[BufferSize-1];
-           AddLog('Card response status word: ',clBlack,false);
-           AddLog(IntToHex(SW12,4),clPurple,true,true);
-           Result:=IntToHex(SW12,4);
-           BufferSize:=BufferSize-2;
-           if Buffersize>0 then
-           begin
-             AddLog('Card response data: ',clBlack,false);
-             s:='';
-             for i:=0 to BufferSize-1 do
-             begin
-               s:=s+IntToHex(Buffer^[i],2)+' ';
-               Rec:=Rec+chr(Buffer^[i]);
-             end;
-             AddLog(s,clPurple, true, true);
-           end;
-          AddLog('Data ASCII: '+Rec,clBlue,true,true);
-         end else
-         begin
-           AddLog(Format('SC Read failed with error code %s ',[IntToHex(PCSCResult ,8)]),clRed,false,true);
-           AddLog('('+FPCSCRaw.ScErrToSymbol(PCSCResult)+').',clBlack,true,false);
-         end;
-     finally
-
-     end;
-end;
 
 end.
 
